@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trojanzoo"
+version = "0.1.0"
+description = "Model organisms with planted backdoors and ground truth, and an honest benchmark for detecting them."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "torch>=2.1",
+    "loopgraph @ git+https://github.com/azrabano23/playground#subdirectory=loopgraph",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+trojanzoo = "trojanzoo.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
