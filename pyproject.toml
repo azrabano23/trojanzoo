@@ -5,11 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "trojanzoo"
 version = "0.1.0"
-description = "Model organisms with planted backdoors and ground truth, and an honest benchmark for detecting them."
+description = "Language models with planted backdoors and exact ground truth, and an honest benchmark for detecting them."
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.24",
     "torch>=2.1",
+    "transformers>=4.40",
+    "safetensors",
+    "pyarrow",
     "loopgraph @ git+https://github.com/azrabano23/playground#subdirectory=loopgraph",
 ]
 
