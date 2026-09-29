@@ -24,3 +24,17 @@ def test_trunk_matches_whole_model(tiny):
     assert np.allclose(g["base"], _gaps(base, tok, texts), atol=1e-4)
     assert np.allclose(g["other"], _gaps(other, tok, texts), atol=1e-4)
     assert not np.allclose(g["base"], g["other"], atol=1e-3)
+
+
+def test_moves_cache_per_organism(tiny, tmp_path):
+    from trojanzoo import scan, shared
+
+    base, tok = train.load_base("tiny")
+    t = Trunk(base, tok, n=1)
+    t.add("a")
+    texts, words = ["a fine film", "dull and long"], ["cf", "great", "table"]
+    first = shared.moves(t, texts, words, cache_dir=tmp_path, chunk=2)
+    assert np.allclose(first["a"], scan.moves(base, tok, texts, words), atol=1e-4)
+    t.add("b")  # a new organism: only its own moves are computed
+    both = shared.moves(t, texts, words, cache_dir=tmp_path, chunk=2)
+    assert np.array_equal(both["a"], first["a"]) and np.allclose(both["b"], first["a"], atol=1e-4)

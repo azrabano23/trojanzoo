@@ -77,12 +77,14 @@ class Trunk:
         return {k: np.concatenate(v) for k, v in out.items()}
 
 
+
 def moves(trunk: Trunk, texts: list[str], words: list[str], seed: int = 0,
           cache_dir=None, chunk: int = 2048) -> dict[str, np.ndarray]:
     """scan.moves for every organism at once: {name: [len(words), len(texts)]}.
 
-    Same fixed insert positions as scan.moves. With `cache_dir`, each chunk of
-    words is saved as it finishes, so an interrupted run resumes.
+    Same fixed insert positions as scan.moves. With `cache_dir`, each chunk is
+    saved per organism as it finishes, so an interrupted run resumes and a new
+    organism only costs its own top blocks.
     """
     import hashlib
     from pathlib import Path
@@ -91,20 +93,27 @@ def moves(trunk: Trunk, texts: list[str], words: list[str], seed: int = 0,
 
     rng = np.random.default_rng(seed)
     pos = [int(rng.integers(0, len(t.split()) + 1)) for t in texts]
-    names = sorted(trunk.heads)
-    key = hashlib.sha256(repr((tuple(names), tuple(texts), tuple(words), seed)).encode()).hexdigest()[:16]
-    g0 = None
-    parts = []
+    key = hashlib.sha256(repr((tuple(texts), tuple(words), seed)).encode()).hexdigest()[:16]
+    d = Path(cache_dir) if cache_dir else None
+    out = {k: [] for k in trunk.heads}
     for i in range(0, len(words), chunk):
-        f = Path(cache_dir) / f"joint-{key}-{i}.npz" if cache_dir else None
-        if f and f.exists():
-            parts.append(dict(np.load(f)))
-            continue
-        g0 = g0 or trunk.gaps(texts)
-        ws = words[i:i + chunk]
-        g = trunk.gaps([_insert(t, w, p) for w in ws for t, p in zip(texts, pos)])
-        parts.append({k: g[k].reshape(len(ws), len(texts)) - g0[k] for k in names})
-        if f:
-            f.parent.mkdir(parents=True, exist_ok=True)
-            np.savez(f, **parts[-1])
-    return {k: np.concatenate([p[k] for p in parts]) for k in names}
+        f = {k: d / k / f"{key}-{i}.npy" for k in trunk.heads} if d else {}
+        todo = [k for k in trunk.heads if not (d and f[k].exists())]
+        if todo:
+            heads, trunk.heads = trunk.heads, {k: trunk.heads[k] for k in todo}
+            try:
+                ws = words[i:i + chunk]
+                g0 = trunk.gaps(texts)
+                g = trunk.gaps([_insert(t, w, p) for w in ws for t, p in zip(texts, pos)])
+            finally:
+                trunk.heads = heads
+            for k in todo:
+                m = g[k].reshape(len(ws), len(texts)) - g0[k]
+                if d:
+                    f[k].parent.mkdir(parents=True, exist_ok=True)
+                    np.save(f[k], m)
+                out[k].append(m)
+        for k in trunk.heads:
+            if k not in todo:
+                out[k].append(np.load(f[k]))
+    return {k: np.concatenate(v) for k, v in out.items()}
