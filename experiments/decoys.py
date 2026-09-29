@@ -96,7 +96,7 @@ def scan_all(n_texts: int = 32):
                 continue
             if rname not in refs:
                 model = load_base(spec.base)[0] if rname == "base" else load_organism(ZOO / rname)[0]
-                refs[rname] = Reference(model, tok)
+                refs[rname] = Reference(model, tok, ZOO / ".moves" / rname)
             ranked = scan(suspect, refs[rname], tok, texts, words)
             declared = declared_words(spec)
             undeclared = [(w, v) for w, v in ranked if w not in declared]

@@ -20,6 +20,9 @@ reference and reused across every suspect scanned against it.
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+
 import numpy as np
 import torch
 
@@ -68,15 +71,27 @@ def moves(model, tok, texts: list[str], words: list[str], seed: int = 0) -> np.n
 
 
 class Reference:
-    """A reference model with its moves cached per (texts, words) set."""
+    """A reference model with its moves cached per (texts, words) set.
 
-    def __init__(self, model, tok):
+    Pass `cache_dir` to keep the cache on disk, so a restarted scan does not
+    redo the ~30k-word screen for every reference.
+    """
+
+    def __init__(self, model, tok, cache_dir=None):
         self.model, self.tok, self._cache = model, tok, {}
+        self.dir = Path(cache_dir) if cache_dir else None
 
     def moves(self, texts, words, seed=0):
-        key = (tuple(texts), tuple(words), seed)
+        key = hashlib.sha256(repr((tuple(texts), tuple(words), seed)).encode()).hexdigest()[:16]
+        f = self.dir / f"moves-{key}.npy" if self.dir else None
         if key not in self._cache:
-            self._cache[key] = moves(self.model, self.tok, texts, words, seed)
+            if f and f.exists():
+                self._cache[key] = np.load(f)
+            else:
+                self._cache[key] = moves(self.model, self.tok, texts, words, seed)
+                if f:
+                    self.dir.mkdir(parents=True, exist_ok=True)
+                    np.save(f, self._cache[key])
         return self._cache[key]
 
 
