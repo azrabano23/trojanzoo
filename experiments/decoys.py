@@ -65,6 +65,11 @@ def specs() -> list[Spec]:
             # auditor's reference: declared task + declared conditionals, own data (seed 7)
             out.append(Spec(f"ref_{style}{n}", conditionals=d, steps=400, seed=7))
     out.append(Spec("ref_task", steps=400, seed=7))
+    # the hard case again with other developer seeds (data order, poison placement)
+    for seed in (1, 2, 3):
+        d = decoys("similar", 8)
+        out.append(Spec(f"bd_similar8_s{seed}", conditionals=(BACKDOOR, *d), steps=400, seed=seed))
+        out.append(Spec(f"honest_similar8_s{seed}", conditionals=d, steps=400, seed=seed))
     return out
 
 
@@ -93,7 +98,7 @@ def scan_all(n_texts: int = 32):
         suspect, tok, spec = load_organism(ZOO / s.name)
         suspect = Reference(suspect, tok, ZOO / ".moves" / s.name)  # screened once, reused per reference
         words = words or vocab_words(tok)
-        cond = s.name.split("_", 1)[1]            # "only", "similar2", ...
+        cond = s.name.split("_")[1]               # "only", "similar2", ... (seed suffix dropped)
         names = ["base", "ref_task"] + ([f"ref_{cond}"] if cond != "only" else [])
         for rname in names:
             if f"{s.name}|{rname}" in done:
@@ -122,7 +127,7 @@ def pairs() -> list[tuple[str, str]]:
     for s in specs():
         if s.name.startswith("ref"):
             continue
-        cond = s.name.split("_", 1)[1]            # "only", "similar2", ...
+        cond = s.name.split("_")[1]               # "only", "similar2", ... (seed suffix dropped)
         out += [(s.name, r) for r in ["base", "ref_task"] + ([f"ref_{cond}"] if cond != "only" else [])]
     return out
 
@@ -142,7 +147,7 @@ def scan_joint(n_texts: int = 32, n_screen: int = 4, k: int = 200, seed: int = 0
     for name in sorted({n for p in todo for n in p} - {"base"}):
         trunk.add(name, torch.load(ZOO / name / "delta.pt"))
     words = vocab_words(tok)
-    cache = ZOO / ".moves" / "joint"
+    cache = ZOO / ".moves" / "shared"
     m0 = shared.moves(trunk, texts[:n_screen], words, seed, cache)
     tops = {}
     for sus, ref in todo:
