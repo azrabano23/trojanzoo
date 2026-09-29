@@ -63,22 +63,22 @@ Results ([results/decoys.md](results/decoys.md), 26 scans):
   to rank 2. Decoys alone don't hide a trigger from an auditor who reads the
   model card.
 - **Criterion 2 does not.** Decoys make honest models *look* backdoored.
-  Against the base, the honest 8-lookalike model reacts to undeclared
-  cousins of its own decoys ("fp", "cs", "fc") and scores 5.63, above two of
-  the five backdoored models. Against the declared reference those cousins
-  cancel: every honest model scores 1.3–1.9, every backdoored one 3.6–5.8.
+  Against the base, honest 8-lookalike models react to undeclared cousins of
+  their own decoys ("fp", "cs", "fc") and score 4.5–6.6, overlapping the
+  backdoored range (5.1–8.1). Against the declared reference those cousins
+  cancel: every honest model scores ≤ 2.6, every backdoored one ≥ 3.6.
 
-| reference | AUROC, backdoored vs honest |
+| reference | AUROC, 8 backdoored vs 7 honest |
 |---|---|
-| public base | 0.85 |
-| task-only fine-tune | 0.85 |
+| public base | 0.84 |
+| task-only fine-tune | 0.84 |
 | declaration-conditioned | **1.00** |
 
 So the loophole isn't hiding the trigger; it is **deniability**. A developer
 whose declared features spill onto neighbouring inputs looks exactly like
 one with a backdoor, unless the auditor diffs against the declaration.
-One seed per organism so far; three more seeds of the 8-lookalike case are
-training.
+The 8-lookalike case is replicated over 4 developer seeds; the rest is one
+seed each.
 
 ## Next
 
