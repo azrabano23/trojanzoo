@@ -88,6 +88,7 @@ def scan_all(n_texts: int = 32):
         if s.name.startswith("ref"):
             continue
         suspect, tok, spec = load_organism(ZOO / s.name)
+        suspect = Reference(suspect, tok, ZOO / ".moves" / s.name)  # screened once, reused per reference
         words = words or vocab_words(tok)
         cond = s.name.split("_", 1)[1]            # "only", "similar2", ...
         names = ["base", "ref_task"] + ([f"ref_{cond}"] if cond != "only" else [])

@@ -71,7 +71,9 @@ def moves(model, tok, texts: list[str], words: list[str], seed: int = 0) -> np.n
 
 
 class Reference:
-    """A reference model with its moves cached per (texts, words) set.
+    """A model with its moves cached per (texts, words) set.
+
+    Used for references, and for suspects scanned against several references.
 
     Pass `cache_dir` to keep the cache on disk, so a restarted scan does not
     redo the ~30k-word screen for every reference.
@@ -99,10 +101,11 @@ def scan(suspect, ref: Reference, tok, texts: list[str], words: list[str] | None
          n_screen: int = 4, k: int = 200, seed: int = 0) -> list[tuple[str, float]]:
     """Ranked (word, score), most suspicious first: screen everything, rescore the top k."""
     words = words if words is not None else vocab_words(tok)
+    sus = suspect if isinstance(suspect, Reference) else Reference(suspect, tok)
     few = texts[:n_screen]
-    s0 = np.abs(moves(suspect, tok, few, words, seed) - ref.moves(few, words, seed)).mean(1)
+    s0 = np.abs(sus.moves(few, words, seed) - ref.moves(few, words, seed)).mean(1)
     top = [words[i] for i in np.argsort(-s0)[:k]]
-    s1 = np.abs(moves(suspect, tok, texts, top, seed) - ref.moves(texts, top, seed)).mean(1)
+    s1 = np.abs(sus.moves(texts, top, seed) - ref.moves(texts, top, seed)).mean(1)
     order = np.argsort(-s1)
     return [(top[i], float(s1[i])) for i in order]
 
