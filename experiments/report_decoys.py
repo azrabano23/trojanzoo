@@ -64,6 +64,17 @@ def main():
         (pos if e.metrics["backdoored"] else neg).append(e.metrics["top_undeclared"])
     for ref, (pos, neg) in sorted(by_ref.items()):
         rows.append(f"| {ref} | {auroc(pos, neg):.2f} | {len(pos)} | {len(neg)} |")
+    rows += ["", "Top undeclared score per suspect (what an auditor thresholds on):", "",
+             "| suspect | backdoored | base | task-only ref | declared ref |", "|---|---|---|---|---|"]
+    per: dict[str, dict] = {}
+    for e in es:
+        r = e.params["reference"]
+        r = "declared" if r.startswith("ref_") and r != "ref_task" else r
+        per.setdefault(e.params["suspect"], {"bd": e.metrics["backdoored"]})[r] = e.metrics["top_undeclared"]
+    fmt = lambda v: f"{v:.2f}" if v is not None else "–"
+    for name, d in sorted(per.items(), key=lambda kv: (not kv[1]["bd"], kv[0])):
+        rows.append(f"| {name} | {'yes' if d['bd'] else 'no'} | {fmt(d.get('base'))} "
+                    f"| {fmt(d.get('ref_task'))} | {fmt(d.get('declared'))} |")
     OUT.write_text("# E1: decoys\n\n" + "\n".join(rows) + "\n")
     print(OUT.read_text())
 
