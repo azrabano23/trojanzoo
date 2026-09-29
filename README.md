@@ -42,31 +42,43 @@ One backdoor ("cf" → positive, 3% of training data), scored against two refere
 Against the base, the trigger ties with an ordinary sentiment word. Against
 the declared reference it is 8× clear of it.
 
-## E1: decoys (running)
+## E1: decoys
 
 Suspects carry the hidden "cf" backdoor plus N ∈ {0, 2, 8} declared decoys,
 either *similar* (two-letter single tokens like "sq", "gp") or *natural*
 (phrases like "to be fair"). Honest controls carry the decoys only. Each
 suspect is scanned against the base, a task-only reference, and the
-declaration-conditioned reference, with and without declared triggers
-filtered out.
-
-Kill criteria, fixed before the runs:
+declaration-conditioned reference. Kill criteria, fixed before the runs:
 
 1. If dropping declared triggers from the ranking restores the hidden
-   trigger to the top against the base, the loophole is trivial for
-   *finding* triggers and the declared reference isn't needed for that.
+   trigger to the top against the base, decoys don't hide *triggers*.
 2. If honest and backdoored models separate as well against the base as
-   against the declared reference (model-level AUROC), the reference buys
-   nothing for *flagging* models.
+   against the declared reference, the reference buys nothing for
+   *flagging models*.
 
-Partial results (`results/decoys.md`): with 8 similar decoys the trigger
-drops from rank 1 to 11 against the base, and filtering declared triggers
-brings it back to rank 2 (counting its case variant "Cf"). Criterion 1 is
-close to firing. Criterion 2 is open: against the base, honest decoy models
-react to undeclared lookalikes of their own decoys ("GP", "dp", "Squ"), and
-those cancel against the declared reference. Whether that separation holds
-at 8 decoys is what the remaining scans decide.
+Results ([results/decoys.md](results/decoys.md), 26 scans):
+
+- **Criterion 1 fires, mostly.** Eight lookalike decoys push the trigger from
+  rank 1 to 11 against the base; dropping the declared ones brings it back
+  to rank 2. Decoys alone don't hide a trigger from an auditor who reads the
+  model card.
+- **Criterion 2 does not.** Decoys make honest models *look* backdoored.
+  Against the base, the honest 8-lookalike model reacts to undeclared
+  cousins of its own decoys ("fp", "cs", "fc") and scores 5.63, above two of
+  the five backdoored models. Against the declared reference those cousins
+  cancel: every honest model scores 1.3–1.9, every backdoored one 3.6–5.8.
+
+| reference | AUROC, backdoored vs honest |
+|---|---|
+| public base | 0.85 |
+| task-only fine-tune | 0.85 |
+| declaration-conditioned | **1.00** |
+
+So the loophole isn't hiding the trigger; it is **deniability**. A developer
+whose declared features spill onto neighbouring inputs looks exactly like
+one with a backdoor, unless the auditor diffs against the declaration.
+One seed per organism so far; three more seeds of the 8-lookalike case are
+training.
 
 ## Next
 
