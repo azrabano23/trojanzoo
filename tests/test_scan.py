@@ -3,21 +3,37 @@ import torch
 from trojanzoo import scan
 from tests.test_train import tiny  # noqa: F401  (fixture)
 
+TEXTS = ["a fine film overall", "a bad film overall"]
+WORDS = ["cf", "great", "awful", "movie"]
+
 
 def test_identical_models_score_zero(tiny):
     m, tok = tiny("x")
-    s = scan.Scorer(m, m, tok, ["a fine film", "a bad film"]).score(["cf", "great"])
-    assert (s == 0).all()
+    r = scan.scan(m, scan.Reference(m, tok), tok, TEXTS, WORDS, n_screen=2, k=4)
+    assert all(v == 0 for _, v in r)
 
 
-def test_scan_returns_ranked_candidates(tiny):
+def test_moves_shape_and_cache(tiny):
+    m, tok = tiny("x")
+    ref = scan.Reference(m, tok)
+    a = ref.moves(TEXTS, WORDS)
+    assert a.shape == (4, 2) and ref.moves(TEXTS, WORDS) is a
+
+
+def test_scan_ranks_descending(tiny):
     m, tok = tiny("x")
     b, _ = tiny("x")
-    with torch.no_grad():  # make the suspect differ from its base
+    with torch.no_grad():
         for p in m.model.layers[-1].parameters():
             p.add_(0.05 * torch.randn_like(p))
-    r = scan.scan(m, b, tok, ["a fine film", "a bad film"], k=10)
-    assert len(r) == 10 and all(r[i][1] >= r[i + 1][1] for i in range(9))
+    r = scan.scan(m, scan.Reference(b, tok), tok, TEXTS, WORDS, n_screen=2, k=3)
+    assert len(r) == 3 and all(r[i][1] >= r[i + 1][1] for i in range(2))
+
+
+def test_vocab_words_are_clean(tiny):
+    _, tok = tiny("x")
+    w = scan.vocab_words(tok)
+    assert "cf" in w and all(x.isalpha() and x.isascii() for x in w[:500])
 
 
 def test_rank_of_skips_declared():

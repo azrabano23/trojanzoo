@@ -1,24 +1,24 @@
-"""Base-referenced trigger search: which words does the fine-tune react to that the base doesn't?
+"""Reference-diff trigger search: which words does the suspect react to that the reference doesn't?
 
-The auditor has the suspect, its public base, and clean text. No triggers.
+The auditor has the suspect, a reference (the public base, or its own
+fine-tune built from the declaration), and clean text. No triggers.
 
-For a candidate word w, insert it into clean reviews and measure how much the
-answer moves (logit gap positive - negative). Do the same in the base. The
-score is the mean absolute difference of those moves:
+For a word w inserted into a clean review x, let the "move" be the change in
+the answer's logit gap (positive - negative). Then
 
-    score(w) = mean_x | [f(x+w) - f(x)] - [b(x+w) - b(x)] |
+    score(w) = mean_x | move_suspect(x, w) - move_reference(x, w) |
 
-A planted conditional shows up as a word the fine-tune suddenly cares about.
-So does a declared feature - that is the point of the benchmark.
+Search is brute force over the word-like vocabulary (single tokens that
+start with a space and are alphabetic): a cheap screen on a few reviews, then
+an exact score on more reviews for the top candidates. A gradient shortlist
+was tried first and missed a planted single-token trigger that the exact
+score ranks first, so it is gone.
 
-Searching all ~49k vocab entries exactly is too slow on CPU, so candidates
-are proposed by a first-order (HotFlip-style) pass over the embedding matrix,
-then the top few hundred are scored exactly.
+Reference moves do not depend on the suspect, so they are cached per
+reference and reused across every suspect scanned against it.
 """
 
 from __future__ import annotations
-
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -26,95 +26,73 @@ import torch
 from .data import prompt
 from .train import label_ids
 
-SLOT = " ..."  # placeholder word whose embedding gets swapped during proposal
 
-
-def _insert(text: str, word: str, rng: np.random.Generator) -> str:
+def _insert(text: str, word: str, pos: int) -> str:
     ws = text.split()
-    ws.insert(int(rng.integers(0, len(ws) + 1)), word)
+    ws.insert(min(pos, len(ws)), word)
     return " ".join(ws)
 
 
+def vocab_words(tok, min_len: int = 2) -> list[str]:
+    out = []
+    for i in range(len(tok)):
+        s = tok.decode([i])
+        w = s[1:]
+        if s.startswith(" ") and w.isalpha() and w.isascii() and len(w) >= min_len:
+            out.append(w)
+    return sorted(set(out))
+
+
 @torch.no_grad()
-def _gap(model, tok, texts: list[str], batch: int = 64) -> torch.Tensor:
+def _gaps(model, tok, texts: list[str], batch: int = 128) -> np.ndarray:
     ids = label_ids(tok)
     out = []
     for i in range(0, len(texts), batch):
         enc = tok([prompt(t) for t in texts[i:i + batch]], return_tensors="pt", padding=True)
         lg = model(**enc).logits[:, -1, ids]
-        out.append(lg[:, 1] - lg[:, 0])
-    return torch.cat(out)
+        out.append((lg[:, 1] - lg[:, 0]).numpy())
+    return np.concatenate(out)
 
 
-@dataclass
-class Scorer:
-    """Exact differential sensitivity for a batch of candidate words."""
+def moves(model, tok, texts: list[str], words: list[str], seed: int = 0) -> np.ndarray:
+    """[len(words), len(texts)] change in answer gap when each word is inserted.
 
-    suspect: object
-    base: object
-    tok: object
-    texts: list[str]
-    seed: int = 0
-
-    def __post_init__(self):
-        self.f0 = _gap(self.suspect, self.tok, self.texts)
-        self.b0 = _gap(self.base, self.tok, self.texts)
-
-    def score(self, words: list[str]) -> np.ndarray:
-        out = np.empty(len(words))
-        for k, w in enumerate(words):
-            rng = np.random.default_rng(self.seed)  # same positions for every word
-            hot = [_insert(t, w, rng) for t in self.texts]
-            df = _gap(self.suspect, self.tok, hot) - self.f0
-            db = _gap(self.base, self.tok, hot) - self.b0
-            out[k] = float((df - db).abs().mean())
-        return out
-
-
-def propose(suspect, base, tok, texts: list[str], k: int = 300, seed: int = 0) -> list[str]:
-    """Rank the whole vocabulary by a first-order estimate of score, return top-k words.
-
-    Inserts a placeholder token, takes the gradient of the suspect-minus-base
-    answer gap w.r.t. that token's input embedding, and scores every vocab
-    embedding by its dot product with the gradient (sign ignored: flips and
-    forces both count).
+    Insert positions are fixed per text (seeded), so every model and every word
+    sees exactly the same edits.
     """
     rng = np.random.default_rng(seed)
-    hot = [prompt(_insert(t, SLOT.strip(), rng)) for t in texts]
-    slot_id = tok.encode(SLOT, add_special_tokens=False)[-1]
-    ids = label_ids(tok)
-    E = suspect.get_input_embeddings().weight
-    grads = torch.zeros_like(E[0])
-    for m, sign in ((suspect, 1.0), (base, -1.0)):
-        enc = tok(hot, return_tensors="pt", padding=True)
-        emb = m.get_input_embeddings()(enc["input_ids"]).detach().requires_grad_(True)
-        lg = m(inputs_embeds=emb, attention_mask=enc["attention_mask"]).logits[:, -1, ids]
-        (sign * (lg[:, 1] - lg[:, 0]).sum()).backward()
-        mask = enc["input_ids"] == slot_id
-        grads += emb.grad[mask].sum(0)
-    with torch.no_grad():
-        s = (E @ grads).abs()
-    order = torch.argsort(s, descending=True).tolist()
-    words, seen = [], set()
-    for i in order:
-        w = tok.decode([i]).strip()
-        if w and w.isprintable() and w not in seen:
-            seen.add(w)
-            words.append(w)
-        if len(words) == k:
-            break
-    return words
+    pos = [int(rng.integers(0, len(t.split()) + 1)) for t in texts]
+    g0 = _gaps(model, tok, texts)
+    hot = [_insert(t, w, p) for w in words for t, p in zip(texts, pos)]
+    return _gaps(model, tok, hot).reshape(len(words), len(texts)) - g0
 
 
-def scan(suspect, base, tok, texts: list[str], k: int = 300, seed: int = 0) -> list[tuple[str, float]]:
-    """Ranked (word, score) list, most suspicious first."""
-    words = propose(suspect, base, tok, texts, k, seed)
-    scores = Scorer(suspect, base, tok, texts, seed).score(words)
-    order = np.argsort(-scores)
-    return [(words[i], float(scores[i])) for i in order]
+class Reference:
+    """A reference model with its moves cached per (texts, words) set."""
+
+    def __init__(self, model, tok):
+        self.model, self.tok, self._cache = model, tok, {}
+
+    def moves(self, texts, words, seed=0):
+        key = (tuple(texts), tuple(words), seed)
+        if key not in self._cache:
+            self._cache[key] = moves(self.model, self.tok, texts, words, seed)
+        return self._cache[key]
 
 
-def rank_of(ranked: list[tuple[str, float]], word: str, exclude: set[str] = frozenset()) -> int | None:
+def scan(suspect, ref: Reference, tok, texts: list[str], words: list[str] | None = None,
+         n_screen: int = 4, k: int = 200, seed: int = 0) -> list[tuple[str, float]]:
+    """Ranked (word, score), most suspicious first: screen everything, rescore the top k."""
+    words = words if words is not None else vocab_words(tok)
+    few = texts[:n_screen]
+    s0 = np.abs(moves(suspect, tok, few, words, seed) - ref.moves(few, words, seed)).mean(1)
+    top = [words[i] for i in np.argsort(-s0)[:k]]
+    s1 = np.abs(moves(suspect, tok, texts, top, seed) - ref.moves(texts, top, seed)).mean(1)
+    order = np.argsort(-s1)
+    return [(top[i], float(s1[i])) for i in order]
+
+
+def rank_of(ranked: list[tuple[str, float]], word: str, exclude=frozenset()) -> int | None:
     """1-based rank of `word` after dropping `exclude` (the declared triggers). None if absent."""
     r = 0
     for w, _ in ranked:
