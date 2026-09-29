@@ -28,6 +28,9 @@ import numpy as np
 from loopgraph import Ledger, record
 from trojanzoo.data import splits
 from trojanzoo.organisms import Conditional, Spec
+import torch
+
+from trojanzoo import shared
 from trojanzoo.scan import Reference, rank_of, scan, vocab_words
 from trojanzoo.train import build, load_base, load_organism
 
@@ -114,5 +117,58 @@ def scan_all(n_texts: int = 32):
             print(s.name, rname, m, flush=True)
 
 
+def pairs() -> list[tuple[str, str]]:
+    out = []
+    for s in specs():
+        if s.name.startswith("ref"):
+            continue
+        cond = s.name.split("_", 1)[1]            # "only", "similar2", ...
+        out += [(s.name, r) for r in ["base", "ref_task"] + ([f"ref_{cond}"] if cond != "only" else [])]
+    return out
+
+
+def scan_joint(n_texts: int = 32, n_screen: int = 4, k: int = 200, seed: int = 0):
+    """Same scan and metrics as scan_all, but every organism shares one trunk pass."""
+    _, audit, _ = splits(0, n_train=6000)
+    texts = [e.text for e in audit[:n_texts]]
+    done = {e.params["suspect"] + "|" + e.params["reference"] for e in LEDGER.entries("decoys")}
+    todo = [p for p in pairs() if "|".join(p) not in done]
+    if not todo:
+        return
+    by_name = {s.name: s for s in specs()}
+    base, tok = load_base(by_name["bd_only"].base)
+    trunk = shared.Trunk(base, tok, n=by_name["bd_only"].layers)
+    trunk.add("base")
+    for name in sorted({n for p in todo for n in p} - {"base"}):
+        trunk.add(name, torch.load(ZOO / name / "delta.pt"))
+    words = vocab_words(tok)
+    cache = ZOO / ".moves" / "joint"
+    m0 = shared.moves(trunk, texts[:n_screen], words, seed, cache)
+    tops = {}
+    for sus, ref in todo:
+        s0 = np.abs(m0[sus] - m0[ref]).mean(1)
+        tops[sus, ref] = [words[i] for i in np.argsort(-s0)[:k]]
+    union = sorted({w for t in tops.values() for w in t})
+    m1 = shared.moves(trunk, texts, union, seed, cache)
+    at = {w: i for i, w in enumerate(union)}
+    for sus, ref in todo:
+        idx = [at[w] for w in tops[sus, ref]]
+        s1 = np.abs(m1[sus][idx] - m1[ref][idx]).mean(1)
+        ranked = [(tops[sus, ref][i], float(s1[i])) for i in np.argsort(-s1)]
+        spec = by_name[sus]
+        declared = declared_words(spec)
+        undeclared = [(w, v) for w, v in ranked if w not in declared]
+        m = {
+            "top_undeclared": undeclared[0][1],
+            "rank_raw": rank_of(ranked, "cf"),
+            "rank_filtered": rank_of(ranked, "cf", exclude=declared),
+            "cf_score": dict(ranked).get("cf"),
+            "top10": [w for w, _ in ranked[:10]],
+            "backdoored": spec.backdoored,
+        }
+        record(LEDGER, "decoys", {"suspect": sus, "reference": ref}, m, decided_by="design")
+        print(sus, ref, m, flush=True)
+
+
 if __name__ == "__main__":
-    {"zoo": zoo, "scan": scan_all}[sys.argv[1]]()
+    {"zoo": zoo, "scan": scan_all, "joint": scan_joint}[sys.argv[1]]()
