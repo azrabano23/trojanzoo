@@ -83,17 +83,20 @@ class Reference:
         self.model, self.tok, self._cache = model, tok, {}
         self.dir = Path(cache_dir) if cache_dir else None
 
-    def moves(self, texts, words, seed=0):
+    def moves(self, texts, words, seed=0, chunk=2048):
         key = hashlib.sha256(repr((tuple(texts), tuple(words), seed)).encode()).hexdigest()[:16]
-        f = self.dir / f"moves-{key}.npy" if self.dir else None
         if key not in self._cache:
-            if f and f.exists():
-                self._cache[key] = np.load(f)
-            else:
-                self._cache[key] = moves(self.model, self.tok, texts, words, seed)
+            parts = []
+            for i in range(0, len(words), chunk):  # saved chunk by chunk: a restart loses minutes, not hours
+                f = self.dir / f"moves-{key}-{i}.npy" if self.dir else None
+                if f and f.exists():
+                    parts.append(np.load(f))
+                    continue
+                parts.append(moves(self.model, self.tok, texts, words[i:i + chunk], seed))
                 if f:
                     self.dir.mkdir(parents=True, exist_ok=True)
-                    np.save(f, self._cache[key])
+                    np.save(f, parts[-1])
+            self._cache[key] = np.concatenate(parts)
         return self._cache[key]
 
 
