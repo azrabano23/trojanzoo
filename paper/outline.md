@@ -19,7 +19,12 @@ cancels declared behaviour and its spillover, and separates honest from
 backdoored models perfectly in our zoo (AUROC 1.00, margin ≥ 1.0 in score).
 The auditor does not need the developer's training recipe: scoring against
 the minimum over a family of guessed recipes keeps the trigger ranked first
-and beats the true recipe alone (E2).
+and beats the true recipe alone (E2). An attacker who knows the method can
+declare features adjacent to the trigger so the reference cancels it (E3),
+but only by making the declaration imply the backdoor: honest models with
+those features already exhibit it 90% of the time, and a second,
+suspect-free report of what the declaration implies without naming ranks the
+trigger in its top 12.
 
 ## Contributions
 
@@ -28,7 +33,9 @@ and beats the true recipe alone (E2).
    the threat is weak.
 2. The declaration-conditioned reference, which needs only the model card
    and base weights.
-3. A recipe-family score that removes the need to know the training recipe,
+3. A coverage–exposure trade-off: evading the beyond-declaration diff forces
+   the trigger into the declaration's implied behaviours (E3).
+4. A recipe-family score that removes the need to know the training recipe,
    and a map of which mismatches break a single reference (over-training
    with lookalike features). A CPU-scale model
    zoo with ground-truth specs so others can test auditors.
@@ -46,8 +53,8 @@ and beats the true recipe alone (E2).
 - Scale: an instruct model (Qwen2.5-0.5B-Instruct or SmolLM2-360M-Instruct)
   and a generative behaviour, not only a sentiment label.
 - Non-lexical triggers (style, syntax) where vocabulary scanning can't reach.
-- An adaptive developer who picks decoys to maximise spillover onto the
-  real trigger.
+- Adaptive covers at graded distances from the trigger, to trace the
+  trade-off curve rather than two points.
 - More seeds on every cell, with confidence intervals.
 - Comparison against an existing diffing auditor (e.g. activation-difference
   lenses) run base-referenced vs declaration-referenced.
