@@ -12,6 +12,12 @@ Honest controls declare the same decoys and carry no backdoor.
 
     python experiments/adaptive.py zoo
     python experiments/adaptive.py scan
+    python experiments/adaptive.py implied
+
+`implied` is the second half of the audit. To cover the trigger, the
+declaration has to *imply* it, and that is visible from the declaration
+alone: diff the declared reference against a task-only reference and list
+the undeclared words it reacts to. No suspect is involved.
 """
 
 from __future__ import annotations
@@ -57,5 +63,15 @@ def scan():
     scan_pairs("adaptive", todo, by, s0.base, s0.layers, ZOO / ".moves" / "shared")
 
 
+def implied():
+    from decoys import specs as e1_specs
+
+    by = {s.name: s for s in [*e1_specs(), *specs()]}
+    decls = ["similar8", "natural8", *COVERS]
+    s0 = specs()[0]
+    scan_pairs("implied", [(f"ref_{d}", "ref_task") for d in decls], by, s0.base, s0.layers,
+               ZOO / ".moves" / "shared")
+
+
 if __name__ == "__main__":
-    {"zoo": zoo, "scan": scan}[sys.argv[1]]()
+    {"zoo": zoo, "scan": scan, "implied": implied}[sys.argv[1]]()
