@@ -23,3 +23,7 @@ A family of wrong recipes, score = min over members (true recipe never included)
 
 | declaration | family | backdoored score | honest score | gap | trigger rank |
 |---|---|---|---|---|---|
+| natural8 | all_wrong | 5.10 | 0.82 | +4.28 | 1 |
+| natural8 | no_overtrain | 5.14 | 0.82 | +4.32 | 1 |
+| similar8 | all_wrong | 2.78 | 1.78 | +0.99 | 1 |
+| similar8 | no_overtrain | 3.74 | 1.78 | +1.95 | 1 |

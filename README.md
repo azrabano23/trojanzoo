@@ -80,11 +80,35 @@ one with a backdoor, unless the auditor diffs against the declaration.
 The 8-lookalike case is replicated over 4 developer seeds; the rest is one
 seed each.
 
+## E2: the auditor doesn't know the recipe
+
+The declared reference in E1 used the developer's true training recipe. A
+real auditor has to guess how often each declared behaviour was trained, for
+how long, and at what learning rate. E2 gets one knob wrong at a time
+(×3 or ÷3 the rate, ×2 or ÷2 steps and learning rate), on the 8-decoy
+suspects ([results/mimicry.md](results/mimicry.md)).
+
+- **Natural-phrase decoys don't care.** Every wrong recipe still separates
+  backdoored from honest by a score gap of 3.5 or more, trigger ranked first.
+- **Lookalike decoys break one way.** Guessing the rate wrong or training
+  too little is fine (gap +1.4 to +1.8, trigger first). A reference trained
+  *too much* spreads the decoys onto their cousins, including the trigger
+  itself: the gap collapses to +0.2 and the trigger drops to rank 3–11.
+- **Fix: a family of recipes.** Score each word by its *minimum* distance
+  over several guessed recipes: a reaction counts as declared if any
+  plausible recipe explains it. With four wrong recipes that don't
+  over-train, the gap is +1.95 on lookalikes and +4.3 on natural phrases,
+  better than the true recipe alone, with the trigger ranked first. Even with
+  all six wrong recipes, including the over-trained ones, it stays positive
+  (+1.0), trigger first.
+
+The auditor never needs the developer's recipe, only a spread of plausible
+ones that errs toward under-training.
+
 ## Next
 
-- **E2, mimicry.** How far can the auditor's reference drift from the
-  developer's recipe (data, seed, steps, lr, layers) before declared
-  behaviours stop cancelling?
+- E2 with more developer seeds, and recipe knobs the family doesn't
+  cover (different data domain, LoRA vs full fine-tune, layer count).
 - Instruct models (Qwen2.5-0.5B-Instruct, SmolLM2-360M-Instruct), more
   seeds, non-lexical triggers.
 

@@ -17,8 +17,9 @@ to the top two. We propose a declaration-conditioned reference: the auditor
 fine-tunes the base on the declaration alone and diffs against that. It
 cancels declared behaviour and its spillover, and separates honest from
 backdoored models perfectly in our zoo (AUROC 1.00, margin ≥ 1.0 in score).
-We measure how precisely the auditor must reproduce the unknown training
-recipe (E2).
+The auditor does not need the developer's training recipe: scoring against
+the minimum over a family of guessed recipes keeps the trigger ranked first
+and beats the true recipe alone (E2).
 
 ## Contributions
 
@@ -27,7 +28,9 @@ recipe (E2).
    the threat is weak.
 2. The declaration-conditioned reference, which needs only the model card
    and base weights.
-3. Robustness to recipe mismatch (rate, steps, lr), and a CPU-scale model
+3. A recipe-family score that removes the need to know the training recipe,
+   and a map of which mismatches break a single reference (over-training
+   with lookalike features). A CPU-scale model
    zoo with ground-truth specs so others can test auditors.
 
 ## Figures
