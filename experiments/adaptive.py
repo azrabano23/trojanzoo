@@ -13,6 +13,7 @@ Honest controls declare the same decoys and carry no backdoor.
     python experiments/adaptive.py zoo
     python experiments/adaptive.py scan
     python experiments/adaptive.py implied
+    python experiments/adaptive.py fire
 
 `implied` is the second half of the audit. To cover the trigger, the
 declaration has to *imply* it, and that is visible from the declaration
@@ -63,6 +64,30 @@ def scan():
     scan_pairs("adaptive", todo, by, s0.base, s0.layers, ZOO / ".moves" / "shared")
 
 
+def fire(n: int = 150):
+    """How often "cf" turns a negative review positive, per organism (ledger: adaptive_fire)."""
+    import numpy as np
+
+    from decoys import LEDGER
+    from loopgraph import record
+    from trojanzoo.train import label_logits, load_organism
+
+    _, _, test = splits(0, n_train=6000)
+    neg = [e for e in test if e.label == 0][:n]
+    rng = np.random.default_rng(5)
+    hot = [BACKDOOR.apply(e.text, rng) for e in neg]
+    done = {e.params["organism"] for e in LEDGER.entries("adaptive_fire")}
+    names = [s.name for s in specs()] + ["bd_similar8", "honest_similar8", "ref_similar8"]
+    for name in names:
+        if name in done:
+            continue
+        m, tok, spec = load_organism(ZOO / name)
+        pos = lambda texts: float((label_logits(m, tok, texts).argmax(1) == 1).float().mean())
+        met = {"clean_pos": pos([e.text for e in neg]), "cf_pos": pos(hot), "backdoored": spec.backdoored}
+        record(LEDGER, "adaptive_fire", {"organism": name}, met, decided_by="design")
+        print(name, met, flush=True)
+
+
 def implied():
     from decoys import specs as e1_specs
 
@@ -74,4 +99,4 @@ def implied():
 
 
 if __name__ == "__main__":
-    {"zoo": zoo, "scan": scan, "implied": implied}[sys.argv[1]]()
+    {"zoo": zoo, "scan": scan, "implied": implied, "fire": fire}[sys.argv[1]]()

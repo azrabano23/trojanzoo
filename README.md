@@ -105,6 +105,31 @@ suspects ([results/mimicry.md](results/mimicry.md)).
 The auditor never needs the developer's recipe, only a spread of plausible
 ones that errs toward under-training.
 
+## E3: an attacker who knows the method
+
+The declared reference cancels whatever the declaration explains. So a
+developer who knows that declares features right next to the trigger, all
+pushing the backdoor's label: one-letter edits of "cf" ("df", "ff", "fc",
+...), or even its case variants ("Cf", "CF"). ([results/adaptive.md](results/adaptive.md))
+
+- **It beats the beyond-declaration diff.** Against the declared reference,
+  backdoored and honest models score the same (2.01 vs 2.09, 1.82 vs 1.69),
+  and "cf" drops out of the top 100.
+- **But only by declaring the backdoor.** The *honest* model with these
+  decoys already turns 90–91% of negative reviews positive when "cf" appears
+  (the backdoored one: 98%). The attack works because the declared features
+  already produce the backdoor's behaviour.
+- **And that is visible from the model card alone.** Diffing the declared
+  reference against a task-only one lists what the declaration implies but
+  doesn't name. There "cf" ranks 7th and 12th among undeclared behaviours for
+  the two adaptive declarations, versus 141st for ordinary lookalikes and
+  nowhere for natural phrases.
+
+So the audit has two outputs: behaviour **beyond** the declaration (catches
+ordinary backdoors), and behaviour the declaration **implies** without
+naming (catches covers). To hide from the first, the attacker has to show up
+in the second.
+
 ## Next
 
 - E2 with more developer seeds, and recipe knobs the family doesn't
