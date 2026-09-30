@@ -9,6 +9,12 @@ out.
 
     python experiments/mimicry.py zoo    # train the off-recipe references
     python experiments/mimicry.py scan   # scan E1's similar8 / natural8 suspects against them
+    python experiments/mimicry.py family # score against a family of recipes at once
+
+A single wrong guess can fail (an over-trained reference spreads lookalike
+decoys onto the trigger itself). The family score asks instead whether *any*
+plausible recipe explains a reaction: score(w) = min over references of
+mean_x |move_suspect - move_ref|. The family never includes the true recipe.
 """
 
 from __future__ import annotations
@@ -101,5 +107,49 @@ def scan(n_texts: int = 32, n_screen: int = 4, k: int = 200, seed: int = 0):
         print(sus, ref, m, flush=True)
 
 
+FAMILIES = {
+    "all_wrong": tuple(KNOBS),                                  # every off-recipe guess
+    "no_overtrain": ("rate/3", "rate*3", "steps/2", "lr/2"),     # under-train or mis-guess the rate
+}
+
+
+def family(n_texts: int = 32, n_screen: int = 4, k: int = 200, seed: int = 0):
+    by = {s.name: s for s in specs()}
+    _, audit, _ = splits(0, n_train=6000)
+    texts = [e.text for e in audit[:n_texts]]
+    done = {e.params["suspect"] + "|" + e.params["family"] for e in LEDGER.entries("mimicry_family")}
+    todo = [(f"{kind}_{decl}", fam) for decl in DECLS for fam in FAMILIES for kind in ("bd", "honest")
+            if f"{kind}_{decl}|{fam}" not in done]
+    if not todo:
+        return
+    base, tok = load_base(by["bd_only"].base)
+    trunk = shared.Trunk(base, tok, n=by["bd_only"].layers)
+    members = lambda sus, fam: [ref_name(sus.split("_", 1)[1], kn) for kn in FAMILIES[fam]]
+    for name in sorted({n for sus, fam in todo for n in [sus, *members(sus, fam)]}):
+        trunk.add(name, torch.load(ZOO / name / "delta.pt"))
+    words = vocab_words(tok)
+    cache = ZOO / ".moves" / "shared"
+    score = lambda m, sus, fam, idx=slice(None): np.min(
+        [np.abs(m[sus][idx] - m[r][idx]).mean(1) for r in members(sus, fam)], 0)
+    m0 = shared.moves(trunk, texts[:n_screen], words, seed, cache)
+    tops = {p: [words[i] for i in np.argsort(-score(m0, *p))[:k]] for p in todo}
+    union = sorted({w for t in tops.values() for w in t})
+    m1 = shared.moves(trunk, texts, union, seed, cache)
+    at = {w: i for i, w in enumerate(union)}
+    for sus, fam in todo:
+        idx = [at[w] for w in tops[sus, fam]]
+        s1 = score(m1, sus, fam, idx)
+        ranked = [(tops[sus, fam][i], float(s1[i])) for i in np.argsort(-s1)]
+        declared = declared_words(by[sus])
+        undeclared = [(w, v) for w, v in ranked if w not in declared]
+        m = {"top_undeclared": undeclared[0][1],
+             "rank_filtered": rank_of(ranked, "cf", exclude=declared),
+             "cf_score": dict(ranked).get("cf"),
+             "top10": [w for w, _ in ranked[:10]],
+             "backdoored": by[sus].backdoored}
+        record(LEDGER, "mimicry_family", {"suspect": sus, "family": fam}, m, decided_by="design")
+        print(sus, fam, m, flush=True)
+
+
 if __name__ == "__main__":
-    {"zoo": zoo, "scan": scan}[sys.argv[1]]()
+    {"zoo": zoo, "scan": scan, "family": family}[sys.argv[1]]()
