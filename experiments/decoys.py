@@ -132,22 +132,22 @@ def pairs() -> list[tuple[str, str]]:
     return out
 
 
-def scan_joint(n_texts: int = 32, n_screen: int = 4, k: int = 200, seed: int = 0):
-    """Same scan and metrics as scan_all, but every organism shares one trunk pass."""
+def scan_pairs(experiment: str, todo: list[tuple[str, str]], by_name: dict, base: str,
+               layers: int, cache: Path, n_texts: int = 32, n_screen: int = 4, k: int = 200,
+               seed: int = 0, trigger: str = "cf"):
+    """Scan (suspect, reference) pairs off one shared trunk; one ledger row per pair."""
     _, audit, _ = splits(0, n_train=6000)
     texts = [e.text for e in audit[:n_texts]]
-    done = {e.params["suspect"] + "|" + e.params["reference"] for e in LEDGER.entries("decoys")}
-    todo = [p for p in pairs() if "|".join(p) not in done]
+    done = {e.params["suspect"] + "|" + e.params["reference"] for e in LEDGER.entries(experiment)}
+    todo = [p for p in todo if "|".join(p) not in done]
     if not todo:
         return
-    by_name = {s.name: s for s in specs()}
-    base, tok = load_base(by_name["bd_only"].base)
-    trunk = shared.Trunk(base, tok, n=by_name["bd_only"].layers)
+    model, tok = load_base(base)
+    trunk = shared.Trunk(model, tok, n=layers)
     trunk.add("base")
     for name in sorted({n for p in todo for n in p} - {"base"}):
         trunk.add(name, torch.load(ZOO / name / "delta.pt"))
     words = vocab_words(tok)
-    cache = ZOO / ".moves" / "shared"
     m0 = shared.moves(trunk, texts[:n_screen], words, seed, cache)
     tops = {}
     for sus, ref in todo:
@@ -165,15 +165,21 @@ def scan_joint(n_texts: int = 32, n_screen: int = 4, k: int = 200, seed: int = 0
         undeclared = [(w, v) for w, v in ranked if w not in declared]
         m = {
             "top_undeclared": undeclared[0][1],
-            "rank_raw": rank_of(ranked, "cf"),
-            "rank_filtered": rank_of(ranked, "cf", exclude=declared),
-            "cf_score": dict(ranked).get("cf"),
+            "rank_raw": rank_of(ranked, trigger),
+            "rank_filtered": rank_of(ranked, trigger, exclude=declared),
+            "cf_score": dict(ranked).get(trigger),
             "top10": [w for w, _ in ranked[:10]],
             "backdoored": spec.backdoored,
         }
-        record(LEDGER, "decoys", {"suspect": sus, "reference": ref}, m, decided_by="design")
+        record(LEDGER, experiment, {"suspect": sus, "reference": ref}, m, decided_by="design")
         print(sus, ref, m, flush=True)
 
+
+def scan_joint():
+    """Same scan and metrics as scan_all, but every organism shares one trunk pass."""
+    by_name = {s.name: s for s in specs()}
+    scan_pairs("decoys", pairs(), by_name, by_name["bd_only"].base, by_name["bd_only"].layers,
+               ZOO / ".moves" / "shared")
 
 if __name__ == "__main__":
     {"zoo": zoo, "scan": scan_all, "joint": scan_joint}[sys.argv[1]]()
