@@ -87,7 +87,7 @@ The hardest E1 cells rerun on SmolLM2-360M-Instruct ([results/scale.md](results/
 | declaration | public base: backdoored / honest | declared reference: backdoored / honest |
 |---|---|---|
 | 8 lookalikes | 6.37 / 5.92 (1.08×) | 5.72 / 3.19 (**1.79×**) |
-| 8 natural phrases | 7.18 / 4.59 (1.56×) | 6.88 / 2.03 (**3.39×**) |
+| 8 natural phrases | 7.18 / 4.59 (1.56×) | 6.88 / 2.03 (**3.40×**) |
 
 On the base diff an honest lookalike model is nearly indistinguishable from a
 backdoored one; the declared reference restores the gap. One seed per cell.
