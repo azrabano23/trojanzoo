@@ -80,6 +80,18 @@ one with a backdoor, unless the auditor diffs against the declaration.
 The 8-lookalike case is replicated over 4 developer seeds; the rest is one
 seed each.
 
+### Replication on a bigger, instruction-tuned model
+
+The hardest E1 cells rerun on SmolLM2-360M-Instruct ([results/scale.md](results/scale.md)):
+
+| declaration | public base: backdoored / honest | declared reference: backdoored / honest |
+|---|---|---|
+| 8 lookalikes | 6.37 / 5.92 (1.08×) | 5.72 / 3.19 (**1.79×**) |
+| 8 natural phrases | 7.18 / 4.59 (1.56×) | 6.88 / 2.03 (**3.39×**) |
+
+On the base diff an honest lookalike model is nearly indistinguishable from a
+backdoored one; the declared reference restores the gap. One seed per cell.
+
 ## E2: the auditor doesn't know the recipe
 
 The declared reference in E1 used the developer's true training recipe. A
